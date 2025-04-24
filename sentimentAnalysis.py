@@ -61,7 +61,7 @@ def validate_jsonl(file_path):
                 
                 # Text formatting validation
                 user_content = next(msg["content"] for msg in messages if msg["role"] == "user")
-                if re.search(r",(?=\w)", user_content):  # Check for CSV-like patterns
+                if re.search(r",\s*(?=[A-Z0-9])", user_content):  # Check for CSV-like patterns
                     errors.append(f"Line {i}: Detected CSV artifacts in user content")
                 if '"' in user_content:
                     errors.append(f"Line {i}: Unnecessary quotes in user content")
@@ -118,7 +118,7 @@ if 'df' in st.session_state and st.session_state.df['discrepancy'].sum() > 0:
             training_data = []
             for _, row in discrepant_df.iterrows():
                 # Extract clean text from original column
-                clean_text = row[text_col].split('",')[0].replace('"', '').strip()
+                clean_text = row[text_col].split('",')[0].replace('\"', '').strip()
                 
                 training_data.append({
                     "messages": [
@@ -127,6 +127,13 @@ if 'df' in st.session_state and st.session_state.df['discrepancy'].sum() > 0:
                         {"role": "assistant", "content": row['gpt4']}
                     ]
                 })
+
+            # Add deduplication here
+            seen = set()
+            training_data = [
+                d for d in training_data 
+                if not (tuple(d.items()) in seen or seen.add(tuple(d.items())))
+            ]
             
             with open('training_data.jsonl', 'w') as f:
                 for item in training_data:
