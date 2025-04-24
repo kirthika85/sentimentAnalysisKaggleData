@@ -34,7 +34,7 @@ with st.expander("Step 1: Compare GPT-4 and GPT-3.5 Results", expanded=True):
         try:
             df = pd.read_csv(uploaded_file)
             df.columns = df.columns.str.strip().str.lower()
-            text_cols = [col for col in df.columns if 'text' in col]
+            text_cols = [col for col in df.columns if 'feedback' in col]
             
             if not text_cols:
                 st.error("No text column found")
