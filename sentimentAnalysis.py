@@ -245,7 +245,7 @@ if 'ft_model' in st.session_state:
                     
                     st.success("Post-training analysis complete!")
                     st.write("Remaining discrepancies:", df['new_discrepancy'].sum())
-                    st.dataframe(df[['text_col', 'gpt4', 'gpt35', 'ft_gpt35']])
+                    st.dataframe(df[[text_col, 'gpt4', 'gpt35', 'ft_gpt35']])
                     
                     csv = df.to_csv(index=False).encode('utf-8')
                     st.download_button(
