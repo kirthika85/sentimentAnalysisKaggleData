@@ -33,7 +33,7 @@ if uploaded_file:
         st.write("Detected columns:", df.columns.tolist())
         
         # Flexible column selection
-        text_cols = [col for col in df.columns if 'Feedback' in col]
+        text_cols = [col for col in df.columns if 'feedback' in col]
         
         if not text_cols:
             st.error("No column containing 'Feedback' found in the CSV file")
