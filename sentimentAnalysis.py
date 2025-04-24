@@ -201,9 +201,13 @@ if 'job_id' in st.session_state:
                 
                 # Show detailed error if available
                 if job.status == 'failed' and job.error:
-                    st.error(f"Error: {job.error['message']}")
-                    if 'code' in job.error:
-                        st.write(f"Error code: {job.error['code']}")
+                    # Safely print error details
+                    if isinstance(job.error, dict):
+                        st.error(f"Error: {job.error.get('message', str(job.error))}")
+                        if 'code' in job.error:
+                            st.write(f"Error code: {job.error['code']}")
+                    else:
+                        st.error(f"Error: {str(job.error)}")
                 
                 # Show job events (fixed parameter passing)
                 st.subheader("Job Events")
