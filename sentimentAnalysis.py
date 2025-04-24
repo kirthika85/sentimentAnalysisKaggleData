@@ -241,12 +241,23 @@ if 'ft_model' in st.session_state:
                 try:
                     df = st.session_state.df
                     df['ft_gpt35'] = df[text_col].apply(lambda x: get_sentiment(st.session_state.ft_model, x))
-                    df['new_discrepancy'] = df['gpt4'] != df['ft_gpt35']
+                    
+                    # Create hybrid results
+                    df['final_sentiment'] = df.apply(
+                        lambda row: row['ft_gpt35'] if row['discrepancy'] else row['gpt35'], 
+                        axis=1
+                    )
+                    
+                    df['new_discrepancy'] = df['gpt4'] != df['final_sentiment']
                     
                     st.success("Post-training analysis complete!")
                     st.write("Remaining discrepancies:", df['new_discrepancy'].sum())
-                    st.dataframe(df[[text_col, 'gpt4', 'gpt35', 'ft_gpt35']])
                     
+                    # Show relevant columns
+                    display_columns = [text_col, 'gpt4', 'gpt35', 'ft_gpt35', 'final_sentiment']
+                    st.dataframe(df[display_columns])
+                    
+                    # Prepare download data
                     csv = df.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         label="Download Full Results",
