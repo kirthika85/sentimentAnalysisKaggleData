@@ -47,8 +47,7 @@ if uploaded_file:
                 # Create new columns for each model
                 models = [
                     ('gpt4_sentiment', 'gpt-4'),
-                    ('gpt35_sentiment', 'gpt-3.5-turbo'),
-                    ('gpt4_mini_sentiment', 'gpt-4-turbo')  # Updated to current model name
+                    ('gpt35_sentiment', 'gpt-3.5-turbo')
                 ]
                 
                 for col_name, model_name in models:
