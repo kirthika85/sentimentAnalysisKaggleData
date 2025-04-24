@@ -3,6 +3,7 @@ import pandas as pd
 import json
 from openai import OpenAI
 import time
+import re
 
 # Set up OpenAI client
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -22,6 +23,30 @@ def get_sentiment(model: str, text: str) -> str:
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Error: {str(e)}"
+
+def validate_jsonl(file_path):
+    """Validate JSONL file structure and content"""
+    errors = []
+    with open(file_path, 'r') as f:
+        for i, line in enumerate(f, 1):
+            try:
+                data = json.loads(line)
+                if "messages" not in data:
+                    errors.append(f"Line {i}: Missing 'messages' key")
+                    continue
+                
+                roles = [msg["role"] for msg in data["messages"]]
+                if "system" not in roles:
+                    errors.append(f"Line {i}: Missing system message")
+                if "user" not in roles:
+                    errors.append(f"Line {i}: Missing user message")
+                if "assistant" not in roles:
+                    errors.append(f"Line {i}: Missing assistant message")
+                    
+            except json.JSONDecodeError as e:
+                errors.append(f"Line {i}: Invalid JSON - {str(e)}")
+    
+    return errors
 
 # Streamlit UI
 st.title("End-to-End Sentiment Analysis Fine-tuning Demo")
@@ -76,6 +101,14 @@ if 'df' in st.session_state and st.session_state.df['discrepancy'].sum() > 0:
                 for item in training_data:
                     f.write(json.dumps(item) + '\n')
             
+            # Validate JSONL file
+            validation_errors = validate_jsonl('training_data.jsonl')
+            if validation_errors:
+                st.error("Validation errors found:")
+                for error in validation_errors:
+                    st.write(error)
+                st.stop()
+            
             st.session_state.training_file = 'training_data.jsonl'
             st.success("Training data generated!")
             st.download_button("Download Training Data", open('training_data.jsonl').read(), "training.jsonl")
@@ -85,51 +118,93 @@ if 'training_file' in st.session_state:
     with st.expander("Step 3: Fine-tune GPT-3.5"):
         if st.button("Start Fine-tuning Job"):
             with st.spinner("Uploading training file and starting job..."):
-                # Upload training file
-                file_obj = client.files.create(
-                    file=open(st.session_state.training_file, "rb"),
-                    purpose="fine-tune"
-                )
+                try:
+                    # Upload training file
+                    file_obj = client.files.create(
+                        file=open(st.session_state.training_file, "rb"),
+                        purpose="fine-tune"
+                    )
+                    
+                    # Wait for file to process
+                    while True:
+                        file_status = client.files.retrieve(file_obj.id).status
+                        if file_status == "processed":
+                            break
+                        time.sleep(1)
+                    
+                    # Start fine-tuning job with latest model version
+                    job = client.fine_tuning.jobs.create(
+                        training_file=file_obj.id,
+                        model="gpt-3.5-turbo-0125",  # Explicitly specify model version
+                        suffix="sentiment-ft",
+                        hyperparameters={"n_epochs": 3}
+                    )
+                    
+                    st.session_state.job_id = job.id
+                    st.session_state.ft_model = None
+                    st.success(f"Fine-tuning job started! ID: {job.id}")
                 
-                # Start fine-tuning job
-                job = client.fine_tuning.jobs.create(
-                    training_file=file_obj.id,
-                    model="gpt-3.5-turbo",
-                    suffix="sentiment-ft"
-                )
-                
-                st.session_state.job_id = job.id
-                st.session_state.ft_model = None
-                st.success(f"Fine-tuning job started! ID: {job.id}")
+                except Exception as e:
+                    st.error(f"Fine-tuning failed: {str(e)}")
+                    if hasattr(e, 'response') and hasattr(e.response, 'json'):
+                        error_details = e.response.json().get('error', {})
+                        st.write("Error details:", error_details)
 
 # Section 4: Monitor Fine-tuning
 if 'job_id' in st.session_state:
     with st.expander("Step 4: Monitor Fine-tuning Progress"):
         if st.button("Check Status"):
-            job = client.fine_tuning.jobs.retrieve(st.session_state.job_id)
-            st.write(f"Status: {job.status}")
+            try:
+                job = client.fine_tuning.jobs.retrieve(st.session_state.job_id)
+                st.write(f"Status: {job.status}")
+                
+                # Show detailed error if available
+                if job.status == 'failed' and job.error:
+                    st.error(f"Error: {job.error['message']}")
+                    if 'code' in job.error:
+                        st.write(f"Error code: {job.error['code']}")
+                
+                # Show job events
+                st.subheader("Job Events")
+                events = client.fine_tuning.jobs.list_events(
+                    job_id=st.session_state.job_id, 
+                    limit=20
+                )
+                for event in reversed(list(events)):
+                    st.write(f"{event.created_at}: {event.message}")
+                
+                if job.fine_tuned_model:
+                    st.session_state.ft_model = job.fine_tuned_model
+                    st.success(f"Model ready! Name: {job.fine_tuned_model}")
             
-            if job.fine_tuned_model:
-                st.session_state.ft_model = job.fine_tuned_model
-                st.success(f"Model ready! Name: {job.fine_tuned_model}")
+            except Exception as e:
+                st.error(f"Failed to retrieve job status: {str(e)}")
 
 # Section 5: Test Fine-tuned Model
 if 'ft_model' in st.session_state:
     with st.expander("Step 5: Test Fine-tuned Model"):
         if st.button("Run Comparative Analysis"):
             with st.spinner("Testing fine-tuned model..."):
-                df = st.session_state.df
-                df['ft_gpt35'] = df[text_col].apply(lambda x: get_sentiment(st.session_state.ft_model, x))
-                df['new_discrepancy'] = df['gpt4'] != df['ft_gpt35']
+                try:
+                    df = st.session_state.df
+                    df['ft_gpt35'] = df[text_col].apply(lambda x: get_sentiment(st.session_state.ft_model, x))
+                    df['new_discrepancy'] = df['gpt4'] != df['ft_gpt35']
+                    
+                    st.success("Post-training analysis complete!")
+                    st.write("Remaining discrepancies:", df['new_discrepancy'].sum())
+                    st.dataframe(df[['text', 'gpt4', 'gpt35', 'ft_gpt35']])
+                    
+                    csv = df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="Download Full Results",
+                        data=csv,
+                        file_name='final_results.csv',
+                        mime='text/csv'
+                    )
                 
-                st.success("Post-training analysis complete!")
-                st.write("Remaining discrepancies:", df['new_discrepancy'].sum())
-                st.dataframe(df[['text', 'gpt4', 'gpt35', 'ft_gpt35']])
-                
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Download Full Results",
-                    data=csv,
-                    file_name='final_results.csv',
-                    mime='text/csv'
-                )
+                except Exception as e:
+                    st.error(f"Model access failed: {str(e)}")
+                    st.write("Ensure:")
+                    st.write("- You're using the correct API key")
+                    st.write("- Model ID is correct")
+                    st.write("- Model has finished deployment")
