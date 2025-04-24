@@ -132,9 +132,12 @@ if 'df' in st.session_state and st.session_state.df['discrepancy'].sum() > 0:
             seen = set()
             training_data = [
                 d for d in training_data 
-                if not (tuple(d.items()) in seen or seen.add(tuple(d.items())))
+                if not (
+                    (d['messages'][1]['content'], d['messages'][2]['content']) in seen 
+                    or seen.add((d['messages'][1]['content'], d['messages'][2]['content']))
+                )
             ]
-            
+
             with open('training_data.jsonl', 'w') as f:
                 for item in training_data:
                     f.write(json.dumps(item) + '\n')
