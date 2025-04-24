@@ -1,14 +1,14 @@
 import streamlit as st
 import pandas as pd
-import openai
+from openai import OpenAI
 
-# Set up OpenAI API
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Set up OpenAI client
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 def analyze_sentiment(text):
     """Use GPT-4 to classify sentiment"""
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "Classify sentiment as Positive, Negative, or Neutral. Respond only with the label."},
