@@ -44,21 +44,21 @@ if uploaded_file:
         
         if st.button("Analyze Sentiment"):
             with st.spinner("Running sentiment analysis across models..."):
-                # Analyze with all models
-                models = {
-                    'gpt4_sentiment': 'gpt-4',
-                    'gpt3.5_sentiment': 'gpt-3.5-turbo',
-                    'gpt4_mini_sentiment': 'gpt-4o-mini'
-                }
+                # Create new columns for each model
+                models = [
+                    ('gpt4_sentiment', 'gpt-4'),
+                    ('gpt35_sentiment', 'gpt-3.5-turbo'),
+                    ('gpt4_mini_sentiment', 'gpt-4-turbo')  # Updated to current model name
+                ]
                 
-                for col_name, model_name in models.items():
+                for col_name, model_name in models:
                     df[col_name] = df[text_col].apply(
                         lambda x: get_sentiment(model_name, x)
                     )
             
             st.success("Analysis complete!")
             st.write("Results:")
-            st.dataframe(df[[text_col, 'gpt4_sentiment', 'gpt3.5_sentiment', 'gpt4_mini_sentiment']])
+            st.dataframe(df[[text_col] + [m[0] for m in models]])  # Show all columns
             
             # Download results
             csv = df.to_csv(index=False).encode('utf-8')
