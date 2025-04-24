@@ -202,10 +202,10 @@ if 'job_id' in st.session_state:
                     if 'code' in job.error:
                         st.write(f"Error code: {job.error['code']}")
                 
-                # Show job events
+                # Show job events (fixed parameter passing)
                 st.subheader("Job Events")
                 events = client.fine_tuning.jobs.list_events(
-                    job_id=st.session_state.job_id, 
+                    st.session_state.job_id,  # Positional argument first
                     limit=20
                 )
                 for event in reversed(list(events)):
