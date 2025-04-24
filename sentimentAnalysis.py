@@ -43,8 +43,7 @@ if uploaded_file:
         
         if st.button("Analyze Sentiment"):
             with st.spinner("Analyzing sentiments..."):
-                # Analyze first 50 rows for demo
-                df = df.head(50)
+                # Analyze ALL rows (no head(50))
                 df['gpt4_sentiment'] = df[text_col].apply(analyze_sentiment)
             
             st.success("Analysis complete!")
