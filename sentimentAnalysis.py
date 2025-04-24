@@ -25,23 +25,46 @@ def get_sentiment(model: str, text: str) -> str:
         return f"Error: {str(e)}"
 
 def validate_jsonl(file_path):
-    """Validate JSONL file structure and content"""
+    """Validate JSONL file structure and content with enhanced checks"""
     errors = []
+    required_labels = {'Positive', 'Negative', 'Neutral'}
+    
     with open(file_path, 'r') as f:
         for i, line in enumerate(f, 1):
             try:
                 data = json.loads(line)
+                
+                # Structure validation
                 if "messages" not in data:
                     errors.append(f"Line {i}: Missing 'messages' key")
                     continue
+                    
+                messages = data["messages"]
+                roles = [msg["role"] for msg in messages]
+                contents = [msg["content"] for msg in messages]
                 
-                roles = [msg["role"] for msg in data["messages"]]
+                # Role validation
                 if "system" not in roles:
                     errors.append(f"Line {i}: Missing system message")
                 if "user" not in roles:
                     errors.append(f"Line {i}: Missing user message")
                 if "assistant" not in roles:
                     errors.append(f"Line {i}: Missing assistant message")
+                
+                # Content validation
+                if len(messages) != 3:
+                    errors.append(f"Line {i}: Incorrect message count ({len(messages)} instead of 3)")
+                
+                assistant_content = next(msg["content"] for msg in messages if msg["role"] == "assistant")
+                if assistant_content not in required_labels:
+                    errors.append(f"Line {i}: Invalid label '{assistant_content}'")
+                
+                # Text formatting validation
+                user_content = next(msg["content"] for msg in messages if msg["role"] == "user")
+                if re.search(r",(?=\w)", user_content):  # Check for CSV-like patterns
+                    errors.append(f"Line {i}: Detected CSV artifacts in user content")
+                if '"' in user_content:
+                    errors.append(f"Line {i}: Unnecessary quotes in user content")
                     
             except json.JSONDecodeError as e:
                 errors.append(f"Line {i}: Invalid JSON - {str(e)}")
@@ -69,8 +92,13 @@ with st.expander("Step 1: Compare GPT-4 and GPT-3.5 Results", expanded=True):
             
             if st.button("Run Initial Analysis"):
                 with st.spinner("Analyzing with GPT-4 and GPT-3.5..."):
-                    df['gpt4'] = df[text_col].apply(lambda x: get_sentiment('gpt-4', x))
-                    df['gpt35'] = df[text_col].apply(lambda x: get_sentiment('gpt-3.5-turbo', x))
+                    # Clean text inputs before analysis
+                    df['clean_text'] = df[text_col].apply(
+                        lambda x: x.split('",')[0].replace('"', '').strip()
+                    )
+                    
+                    df['gpt4'] = df['clean_text'].apply(lambda x: get_sentiment('gpt-4', x))
+                    df['gpt35'] = df['clean_text'].apply(lambda x: get_sentiment('gpt-3.5-turbo', x))
                     df['discrepancy'] = df['gpt4'] != df['gpt35']
                 
                 st.session_state.df = df
@@ -89,10 +117,13 @@ if 'df' in st.session_state and st.session_state.df['discrepancy'].sum() > 0:
         if st.button("Generate Training JSONL"):
             training_data = []
             for _, row in discrepant_df.iterrows():
+                # Extract clean text from original column
+                clean_text = row[text_col].split('",')[0].replace('"', '').strip()
+                
                 training_data.append({
                     "messages": [
                         {"role": "system", "content": "Classify sentiment as Positive, Negative, or Neutral. Respond only with the label."},
-                        {"role": "user", "content": row[text_col]},
+                        {"role": "user", "content": clean_text},
                         {"role": "assistant", "content": row['gpt4']}
                     ]
                 })
