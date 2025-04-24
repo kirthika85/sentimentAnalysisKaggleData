@@ -201,13 +201,16 @@ if 'job_id' in st.session_state:
                 
                 # Show detailed error if available
                 if job.status == 'failed' and job.error:
-                    # Safely print error details
-                    if isinstance(job.error, dict):
-                        st.error(f"Error: {job.error.get('message', str(job.error))}")
-                        if 'code' in job.error:
-                            st.write(f"Error code: {job.error['code']}")
-                    else:
-                        st.error(f"Error: {str(job.error)}")
+                    error_message = job.error.message if hasattr(job.error, 'message') else str(job.error)
+                    st.error(f"Error: {error_message}")
+                    
+                    # Specific check for example count error
+                    if "must have at least 10 examples" in error_message:
+                        st.warning("Please ensure your training data contains at least 10 examples.")
+                        
+                    # Check for error code if available
+                    if hasattr(job.error, 'code'):
+                        st.write(f"Error code: {job.error.code}")
                 
                 # Show job events (fixed parameter passing)
                 st.subheader("Job Events")
