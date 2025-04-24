@@ -116,6 +116,10 @@ if 'df' in st.session_state and st.session_state.df['discrepancy'].sum() > 0:
         
         if st.button("Generate Training JSONL"):
             training_data = []
+            if len(discrepant_df) < 10:
+                st.error("Need at least 10 examples with discrepancies to start fine-tuning")
+                st.stop()
+    
             for _, row in discrepant_df.iterrows():
                 # Extract clean text from original column
                 clean_text = row[text_col].split('",')[0].replace('\"', '').strip()
@@ -199,34 +203,35 @@ if 'job_id' in st.session_state:
                 job = client.fine_tuning.jobs.retrieve(st.session_state.job_id)
                 st.write(f"Status: {job.status}")
                 
-                # Show detailed error if available
-                if job.status == 'failed' and job.error:
-                    error_message = job.error.message if hasattr(job.error, 'message') else str(job.error)
-                    st.error(f"Error: {error_message}")
-                    
-                    # Specific check for example count error
-                    if "must have at least 10 examples" in error_message:
-                        st.warning("Please ensure your training data contains at least 10 examples.")
-                        
-                    # Check for error code if available
-                    if hasattr(job.error, 'code'):
-                        st.write(f"Error code: {job.error.code}")
-                
+              
                 # Show job events (fixed parameter passing)
                 st.subheader("Job Events")
                 events = client.fine_tuning.jobs.list_events(
                     st.session_state.job_id,  # Positional argument first
                     limit=20
                 )
+
                 for event in reversed(list(events)):
                     st.write(f"{event.created_at}: {event.message}")
                 
-                if job.fine_tuned_model:
+                error_messages = [e.message for e in events if e.level == "error"]
+                # Display any found error messages
+                if error_messages:
+                    st.error("Job Errors:")
+                    for msg in error_messages:
+                        st.write(f"- {msg}")
+                        if "must have at least 10 examples" in msg:
+                            st.warning("Add more examples with discrepancies between GPT-4 and GPT-3.5 predictions")
+                
+                # Standard status display
+                if job.status == 'failed':
+                    st.error("Job failed during processing")
+                elif job.status == 'succeeded':
                     st.session_state.ft_model = job.fine_tuned_model
-                    st.success(f"Model ready! Name: {job.fine_tuned_model}")
-            
+                    st.success(f"Model ready: {job.fine_tuned_model}")
+                    
             except Exception as e:
-                st.error(f"Failed to retrieve job status: {str(e)}")
+                st.error(f"Status check failed: {str(e)}")
 
 # Section 5: Test Fine-tuned Model
 if 'ft_model' in st.session_state:
